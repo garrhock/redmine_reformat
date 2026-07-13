@@ -21,6 +21,11 @@ module RedmineReformat
               @table.push row_array
             end
             @table.delete_at(1) if @header #strip header separator
+            # pad ragged rows with empty cells so that they do not fail the formatting
+            columns = @table.map(&:length).max || 0
+            @table.each do |row|
+              (columns - row.length).times { row.push String.new }
+            end
             @table
           end
 

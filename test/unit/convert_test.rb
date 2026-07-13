@@ -26,6 +26,14 @@ class TextileToMarkdownConverterTest < ActiveSupport::TestCase
     check_conversion "macros"
   end
 
+  test "should convert textile to markdown - images" do
+    check_conversion "images"
+  end
+
+  test "should convert textile to markdown - tables in collapse macros and ragged tables" do
+    check_conversion "collapse_table"
+  end
+
   # https://github.com/tckz/redmine-wiki_graphviz_plugin
   test "should convert textile to markdown - graphviz_me macro" do
     check_conversion "graphviz_me"

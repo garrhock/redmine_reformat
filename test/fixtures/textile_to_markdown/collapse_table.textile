@@ -1,0 +1,21 @@
+h1. Collapse macro with glued content
+
+{{collapse(View details...)
+|_.Name|_.Value|
+|foo|bar baz|
+|long cell here|x|
+}}
+
+{{collapse(Show the log)
+Some leading text.
+|_.Date|_.Event|
+|2021-01-01|started|
+}}
+
+Text after.
+
+h1. Ragged table
+
+|_.Release|_.Date|_.Notes|
+|7.0|2021-01-01|
+|7.1|2021-06-01|fixed stuff|

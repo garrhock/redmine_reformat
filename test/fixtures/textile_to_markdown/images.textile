@@ -1,0 +1,17 @@
+h1. Images
+
+Plain image: !clipboard.png!
+
+Image with alt: !diagram.png(My diagram)!
+
+Styled image: !{width:300px}screenshot_2021-05-04.png!
+
+Styled image with alt: !{width:300px;height:200px}chart-v2.png(Quarterly chart)!
+
+Right-aligned image: !>floaty.png!
+
+Linked image: !thumb.png!:http://example.com/full.png
+
+Linked styled image: !{width:50%}thumb_img.png!:http://example.com/full.png
+
+An image !inline_pic.png! in the middle of a sentence.

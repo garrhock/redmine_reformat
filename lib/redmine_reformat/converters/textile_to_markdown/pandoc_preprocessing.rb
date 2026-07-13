@@ -97,6 +97,22 @@ module RedmineReformat
           end
         end
 
+        # {{collapse}} bodies are kept in the text and converted (see #rip_macros), but
+        # pandoc treats the '{{collapse(...)' and '}}' delimiter lines as plain paragraph
+        # lines. A block construct (typically a table) glued directly to a delimiter line
+        # is absorbed into that paragraph and mangled - e.g. table pipes get escaped
+        # as \| and the table no longer renders. Blank lines around the body keep the
+        # delimiters in paragraphs of their own. Redmine renders the extra blank lines
+        # inside the macro body just fine.
+        def normalize_collapse_blocks(textile)
+          textile.gsub!(/^(\{\{collapse(?![^\n]*\}\})[^\n]*)\n(.*?)^(\}\}[[:blank:]]*)$/m) do
+            copen, body, cclose = $~[1..3]
+            body.sub!(/\A(?!\n)/, "\n")
+            body.sub!(/([^\n])\n\z/, "\\1\n\n")
+            "#{copen}\n#{body}#{cclose}"
+          end
+        end
+
         #
         # Flexible HTML escaping
         #
@@ -386,6 +402,40 @@ module RedmineReformat
           text.gsub!(/<br \/>/, "\n")
         end
 
+        # Textile image, adapted from Redmine's RedCloth3 IMAGE_RE
+        IMAGE_RE = /
+                (>|\s|^|\|)          # start of line, before space or table cell ($pre)
+                \!                   # opening
+                (\<|\=|\>)?          # optional alignment atts ($align)
+                (#{C})               # optional style,class atts ($atts)
+                (?:\.\s)?            # optional dot-space
+                ([^\s(!]+?)          # presume this is the src ($src)
+                \s?                  # optional space
+                (?:\(((?:[^\(\)]|\([^\)]+\))+)\))?   # optional title ($title)
+                \!                   # closing
+                (?::(                # optional href ($href)
+                  \S+?
+                )([^\w\s\/;=\?]*?)(?=\s|<|$))? # ($href_post)
+            /x
+        # Eat Textile image alignment and style/class attributes.
+        # GFM cannot express image attributes, so pandoc's gfm writer falls back to
+        # a raw HTML <img> tag. Apart from being unwanted output, attribute values
+        # carry placeholderized characters into HTML attributes, where they can
+        # never be restored - the cause of 'placeholder usage is N at the end'
+        # warnings. Plain !src(title)! images convert cleanly, so reduce to that.
+        def normalize_images(text)
+          text.gsub!(IMAGE_RE) do |m|
+            pre, align, atts, src, title, href, href_post = $~[1..7]
+            if "#{align}#{atts}".empty?
+              m
+            else
+              titlepart = title ? "(#{title})" : ''
+              hrefpart = href ? ":#{href}#{href_post}" : ''
+              "#{pre}!#{src}#{titlepart}!#{hrefpart}"
+            end
+          end
+        end
+
         # This should be what Pandoc matches in the unbracketed version
         PANDOC_LINK_RE = /
           ((?:[\s\[{(]|[#{PUNCT}])?) # $ppre
@@ -636,8 +686,10 @@ module RedmineReformat
               next "#{@ph.ph_for(nil, :none)}#{blk}" unless space
               # supported by pandoc, but not Redmine
               next "#{@ph.ph_for(nil, :none)}#{blk}" if ['bc'].include? tagpre
-              # drop attributes - probably should be done on more blocks
-              next "#{tag}.#{cite}#{space}#{content}" if ['h'].include? tagpre
+              # drop attributes, which cannot be expressed in markdown anyway - pandoc
+              # would either eat them silently (incl. any placeholders inside) or turn
+              # the block into raw HTML
+              next "#{tag}.#{cite && ":#{cite}"}#{space}#{content}" if ['h', 'p', 'bq'].include? tagpre
 
               next blk unless tagpre == 'fn'
               # deal with footnotes
@@ -885,8 +937,21 @@ module RedmineReformat
           text.gsub!(TAG_LINE_BREAK_IN_QTAG, "  \n")
         end
 
+        # pandoc duplicates the Textile image title '!img.png(text)!' to both the
+        # alt and the title of the MD image. Textile has no distinct image title,
+        # so drop the duplicate. It would otherwise also break placeholder usage
+        # accounting, as the placeholders in the title get restored twice.
+        def md_dedup_image_titles(text)
+          text.gsub!(/!\[([^\]\n]+)\](\([^)\s"]+)[ ]"\1"\)/) do
+            "![#{$1}]#{$2})"
+          end
+        end
+
         def md_remove_auxiliary_code_block_lang(text)
           text.gsub!(' ' + TAG_FENCED_CODE_BLOCK, '')
+          # pandoc keeps the auxiliary class when it outputs raw HTML instead of
+          # a fenced code block, e.g. for a <pre> inside a table cell
+          text.gsub!(/\s*class="#{TAG_FENCED_CODE_BLOCK}"/, '')
         end
 
         def restore_context_free_placeholders(text)

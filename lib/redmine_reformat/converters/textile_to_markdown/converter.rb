@@ -64,6 +64,7 @@ module RedmineReformat
           # Do not interfere with protected blocks
           rip_offtags textile, false, false
           rip_macros textile
+          normalize_collapse_blocks textile
           unindent_pre_offtag textile
           # Move the class from <code> to <pre> and remove <code>, so pandoc can generate a code block with correct language
           merge_pre_code_offtags textile
@@ -85,8 +86,9 @@ module RedmineReformat
           # block should be processed here before inlines, but delaying some of them,
           # as their syntax collides with some tricky inline sequences
           hard_break textile
-          # TODO: We should eat image attributes here, as image attributes are now causing warnings about
-          # unreplaced placeholders when attributes are used.
+          # eat image attributes, which cannot be expressed in markdown anyway and would
+          # make pandoc produce raw HTML <img> tags with unreplaced placeholders in them
+          normalize_images textile
           inline_textile_link textile # avoid misinterpeation of invalid link-like sequences
           inline_textile_code textile # offtagize inline code
           block_textile_table textile
@@ -151,6 +153,7 @@ module RedmineReformat
         def post_process_markdown(markdown)
 
           restore_protected_line_breaks markdown
+          md_dedup_image_titles markdown
           restore_context_free_placeholders markdown
           restore_qtag_chars_to_md markdown
           md_footnotes markdown

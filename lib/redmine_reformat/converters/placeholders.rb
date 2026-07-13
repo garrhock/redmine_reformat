@@ -42,6 +42,14 @@ module RedmineReformat
 
       def finalize_text(text)
         remove_breakers text, :init
+        # Restore placeholders that leaked through their restore steps as a last
+        # resort, e.g. when pandoc relocates them where the restoring regexps
+        # cannot match. Restoring the original content without context-specific
+        # escaping still beats corrupting the converted text with invisible
+        # private use area characters.
+        text.gsub!(UNICODE_1CHAR_PRIV_OPTBREAKS_RE) do |ph|
+          restore_last_resort(ph)
+        end
         text.scan(/[«»]/) do |m|
           warn("a string breaker '#{m}' likely leaked to the output MD")
         end
@@ -52,7 +60,11 @@ module RedmineReformat
           end
         end
         @ph_usage.each_with_index do |val, i|
-          warn "placeholder '#{@ph_chars[i]}' usage is #{val} at the end" unless val.zero?
+          next if val.zero?
+          # empty-string placeholders carry no content - nothing is lost when
+          # pandoc eats them
+          next if @ph_chars[i].sub(/\A«[^»]*»/, '').empty?
+          warn "placeholder '#{@ph_chars[i]}' usage is #{val} at the end"
         end
         rand_re = @@match_context_randoms.each_value.map{|r| Regexp::quote(r)}.join('|')
         warn "a placeholder match context likely leaked to the output MD" if text.match? rand_re
@@ -194,6 +206,22 @@ module RedmineReformat
         m.gsub!(/<random>/){@@match_context_randoms[contextstr]}
         m.gsub!(/<ph>/, "(#{to_capturestr(capture)}(?:#{phmatch}){#{min},#{max}})")
         m
+      end
+
+      # Restore a leaked placeholder to its original content regardless of
+      # context and without any context-specific escaping. Only used by
+      # #finalize_text once all regular restores are done.
+      def restore_last_resort(phmatch)
+        core = phmatch.tr('«»', '')
+        i = @char_phs.index(core.ord)
+        return phmatch if i.nil?
+        # :init and context-free placeholders are subject to the regular
+        # #finalize_text restore
+        context = @ph_chars[i].match(/\A«([^»]*)»/) {$1}
+        return phmatch if context.nil? || context == 'init'
+        @ph_usage[i] -= 1
+        warn "leaked placeholder '#{@ph_chars[i]}' restored as last resort"
+        @ph_chars[i].sub(/\A«[^»]*»/, '')
       end
 
       def restore1(ph, context = nil, &block)
