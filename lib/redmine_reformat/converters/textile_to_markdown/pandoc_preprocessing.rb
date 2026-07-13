@@ -947,6 +947,30 @@ module RedmineReformat
           end
         end
 
+        # Remove empty HTML comments that would otherwise stay embedded in the
+        # converted text. Must be called after #md_separate_lists, which converts
+        # the pandoc list separator comments that are still needed, and before
+        # #restore_aftercode_placeholders, so that comment-like content in code
+        # blocks is still placeholderized and cannot be matched.
+        def md_remove_empty_html_comments(text)
+          empty_comment_patterns = []
+          # raw empty comments are pandoc leftovers - keep them for formattings
+          # where HTML comments act as list separators
+          unless @format_opts[:list_separator_html_comment]
+            empty_comment_patterns << /(?<!\\)<!--[[:space:]-]*-->/
+          end
+          # empty HTML comments in the Textile source come out escaped by pandoc
+          # and would render as visible text
+          empty_comment_patterns << /\\<!--[[:space:]-]*--\\?>/
+          empty_comment_patterns << /&lt;!--[[:space:]-]*--&gt;/
+          empty_comment_patterns.each do |pattern|
+            # comment on its own line - take a trailing hard break and one
+            # adjacent blank line with it
+            text.gsub!(/^[ \t]*#{pattern}[ \t]*(?:\\|[ ]{2})?(?:\n[ \t]*$)?(?:\n|\Z)/, '')
+            text.gsub!(pattern, '')
+          end
+        end
+
         def md_remove_auxiliary_code_block_lang(text)
           text.gsub!(' ' + TAG_FENCED_CODE_BLOCK, '')
           # pandoc keeps the auxiliary class when it outputs raw HTML instead of
@@ -1010,7 +1034,8 @@ module RedmineReformat
 
         def md_separate_lists(text)
           unless @format_opts[:list_separator_html_comment]
-            text.gsub!(/\n\n<!-- end list -->\n/, "\n\n&#29;\n")
+            # pandoc < 3 says '<!-- end list -->', newer pandoc just '<!-- -->'
+            text.gsub!(/\n\n<!--( end list)? -->\n/, "\n\n&#29;\n")
           end
         end
 

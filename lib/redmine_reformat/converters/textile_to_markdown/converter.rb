@@ -159,6 +159,7 @@ module RedmineReformat
           md_footnotes markdown
           md_remove_auxiliary_code_block_lang markdown
           md_separate_lists markdown
+          md_remove_empty_html_comments markdown
           # Restore/unescaping sequences that are protected differently in code blocks
           md_polish_before_code_restore markdown
           # Replace code and link placeholders *after* playing with the text
