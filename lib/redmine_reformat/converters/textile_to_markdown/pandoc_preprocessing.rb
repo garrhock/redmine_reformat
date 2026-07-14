@@ -482,9 +482,18 @@ module RedmineReformat
               # Redmine does not recognize bracketed version while Pandoc does
               pre.sub!(/\[$/, '&#91;') if pre
               url.gsub!(']') {|b| @ph.ph_for(b, :none)}
+              unless fulltext =~ /\S/
+                # Redmine renders a link with blank text as barely visible
+                # clickable whitespace - rather make the link target visible.
+                # Absolute URLs are autolinked when rendering.
+                next "#{pre}#{url}#{slash}#{post}" unless proto == '/'
+                fulltext = "#{url}#{slash}"
+              end
+              # Redmine tolerates spaces following the opening quote, pandoc does not
+              lspace = fulltext.slice!(/\A[[:blank:]]+/) if fulltext =~ /\A[[:blank:]]+[^[:blank:]]/
               inline_textile_span_to_phs fulltext
               protect_qtag_chars fulltext
-              "#{pre}[\"#{fulltext}\":#{url}#{slash}]#{post}"
+              "#{pre}#{lspace}[\"#{fulltext}\":#{url}#{slash}]#{post}"
             else
               m.gsub('"', '&quot;')
             end
@@ -961,12 +970,24 @@ module RedmineReformat
           end
           # empty HTML comments in the Textile source come out escaped by pandoc
           # and would render as visible text
-          empty_comment_patterns << /\\<!--[[:space:]-]*--\\?>/
+          empty_comment_patterns << /\\<\\?!--[[:space:]-]*--\\?>/
           empty_comment_patterns << /&lt;!--[[:space:]-]*--&gt;/
           empty_comment_patterns.each do |pattern|
-            # comment on its own line - take a trailing hard break and one
-            # adjacent blank line with it
-            text.gsub!(/^[ \t]*#{pattern}[ \t]*(?:\\|[ ]{2})?(?:\n[ \t]*$)?(?:\n|\Z)/, '')
+            # a comment line, including an eventual trailing hard break
+            comment_line = /[ \t]*#{pattern}[ \t]*(?:\\|[ ]{2})?/
+            # Remove comment lines and collapse them with the surrounding blank
+            # lines to a single block boundary, so that no extra blank line is
+            # left behind and no adjacent blocks get joined.
+            text.gsub!(/
+              (^[ \t]*\n)?                     # blank line before
+              (?:
+                ^#{comment_line}(?:\n|\Z)      # comment line(s)
+                |^[ \t]*\n(?=#{comment_line})  # incl. blank lines between them
+              )+
+              (^[ \t]*\n)?                     # blank line after
+            /x) do
+              if $~.begin(0).zero? then '' else $1 || $2 || '' end
+            end
             text.gsub!(pattern, '')
           end
         end
