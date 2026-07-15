@@ -72,6 +72,11 @@ module RedmineReformat
           # normalize line breaks
           text.gsub!(/\r\n?/, "\n")
           text.gsub!(/\t/, '    ')
+          # remove ANSI escape sequences and ASCII control characters, which
+          # usually come from pasted terminal or log output and are invalid in
+          # the rendered HTML anyway
+          text.gsub!(/\x1B\[[0-9;]*[A-Za-z]/, '')
+          text.gsub!(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/, '')
           text.gsub!(/^ +$/, '')
           text.gsub!(/\n{3,}/, "\n\n")
           # this is probably counterproductive:
@@ -426,12 +431,17 @@ module RedmineReformat
         def normalize_images(text)
           text.gsub!(IMAGE_RE) do |m|
             pre, align, atts, src, title, href, href_post = $~[1..7]
-            if "#{align}#{atts}".empty?
+            if "#{align}#{atts}".empty? && href.nil?
               m
             else
               titlepart = title ? "(#{title})" : ''
-              hrefpart = href ? ":#{href}#{href_post}" : ''
-              "#{pre}!#{src}#{titlepart}!#{hrefpart}"
+              if href
+                # pandoc < 3 does not understand the '!image!:link' form, but
+                # both understand the quoted link form with an image inside
+                "#{pre}\"!#{src}#{titlepart}!\":#{href}#{href_post}"
+              else
+                "#{pre}!#{src}#{titlepart}!"
+              end
             end
           end
         end
@@ -614,15 +624,31 @@ module RedmineReformat
         # - we should drop unsupported table features like
         #     - https://github.com/jgm/pandoc/issues/22 - colspan/rowspan notation ("|\2." or "|/2.")
         #     - https://github.com/jgm/pandoc/issues/22 - alignement notation ("|>." or "|<." or "|=.")
+        # A cell separator row of a markdown table mistakenly used in Textile
+        MD_TABLE_SEPARATOR_ROW_RE = /\A\s*\|(?:\s*:?-{2,}:?\s*\|)+\s*(?:<br \/>)?\s*\z/
         def block_textile_table(text)
           text.replace(text.split(BLOCKS_GROUP_RE).collect do |blk|
             blk.strip!
+            # Redmine renders a table even when it directly follows a paragraph
+            # without a blank line in between - separate them to get the table
+            # recognized (line breaks are encoded as <br /> here, see #hard_break)
+            blk.sub!(/\A((?:(?![ \t]*\|)[^\n]*?<br \/>)+)(?=[ \t]*\|[^\n]*\|)/) do
+              "#{$1.sub(/<br \/>\z/, '')}\n\n"
+            end
             blk.gsub(TABLE_RE) do |matches|
               tatts, fullrow, after = $~[1..3]
               rows = []
+              md_header_row = false
               fullrow.gsub!(/([^|\s])\s*\n/, "\\1<br />")
               fullrow.each_line do |row|
                 row = $2 if row =~ /^(#{A}#{C}\. )(.*)/m
+                # users often mark header cells with '|*.' instead of '|_.'
+                row.gsub!(/\|\*\./, '|_.') if row =~ /\A\s*(?:\|[_*]\.(?:\[\[[^|\]]*\|[^|\]]*\]\]|[^|])*)+\|\s*\z/
+                if rows.length == 1 && row =~ MD_TABLE_SEPARATOR_ROW_RE
+                  # eat markdown table separator rows and make the first row a header
+                  md_header_row = true
+                  next
+                end
                 cells = []
                 # the regexp prevents wiki links with a | from being cut as cells
                 row.scan(/\|(_?#{S}#{A}#{C}\. ?)?((\[\[[^|\]]*\|[^|\]]*\]\]|[^|])*?)(?=\|)/) do |modifiers, cell|
@@ -634,7 +660,9 @@ module RedmineReformat
                 end
                 rows << "|#{cells.join('|')}|"
               end
+              rows[0].gsub!(/\|(?!\z)(?!_\.)/, '|_.') if md_header_row && rows[0]
               # make sure we have new line before table - pandoc does not detect it otherwise
+              after = "\n\n" if after == "\n"
               "\n\n#{rows.join("\n")}#{after}"
             end
           end.join("\n\n"))
@@ -1054,9 +1082,26 @@ module RedmineReformat
         end
 
         def md_separate_lists(text)
-          unless @format_opts[:list_separator_html_comment]
-            # pandoc < 3 says '<!-- end list -->', newer pandoc just '<!-- -->'
-            text.gsub!(/\n\n<!--( end list)? -->\n/, "\n\n&#29;\n")
+          # pandoc < 3 says '<!-- end list -->', newer pandoc just '<!-- -->'
+          if @format_opts[:list_separator_html_comment]
+            text.gsub!(/\n\n<!-- end list -->\n/, "\n\n<!-- -->\n")
+          else
+            # The &#29; entity renders as an empty paragraph in Redcarpet, so
+            # emit it only where the following block would otherwise be merged
+            # into the preceding list: before another list of the same type and
+            # before indented content. Fenced code blocks and lists of the
+            # other type stand on their own.
+            text.gsub!(/\n\n<!--( end list)? -->\n(?=\n([^\n]*))/) do
+              nxt = $2
+              prev = $~.pre_match[/[^\n]*\z/]
+              prev_bullet = prev =~ /\A\s*[-+*]\s/
+              prev_ordered = prev =~ /\A\s*\d+\.\s/
+              nxt_bullet = nxt =~ /\A\s{0,3}[-+*]\s/
+              nxt_ordered = nxt =~ /\A\s{0,3}\d+\.\s/
+              separable = nxt =~ /\A\s{0,3}(```|~~~)/ ||
+                (prev_bullet && nxt_ordered) || (prev_ordered && nxt_bullet)
+              separable ? "\n" : "\n\n&#29;\n"
+            end
           end
         end
 
