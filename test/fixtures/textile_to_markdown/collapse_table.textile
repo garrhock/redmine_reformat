@@ -19,22 +19,3 @@ h1. Ragged table
 |_.Release|_.Date|_.Notes|
 |7.0|2021-01-01|
 |7.1|2021-06-01|fixed stuff|
-
-h1. Star-dot header cells
-
-|*. Name |*. Description |_. Acceptable Values |
-| desc | Provides a brief description | String |
-
-h1. Markdown table in textile
-
-| Name | Description | Default |
-|----|------------|--------|
-| param.name | What it does | default value |
-
-h1. Table directly after text
-
-Query plan:
-| Id | Operation | Name |
-| 0 | SELECT STATEMENT | |
-
-next paragraph

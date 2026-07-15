@@ -10,17 +10,8 @@ module RedmineReformat
     module TextileToMarkdown
 
       class Converter
-        # opts:
-        # - 'list_separator_html_comment': use '<!-- -->' instead of '&#29;' to
-        #   keep adjacent lists and following indented code blocks apart when
-        #   converting to the 'markdown' (Redcarpet) formatting. Only use it if
-        #   your Redmine renders HTML comments invisibly.
-        def initialize(opts = {})
-          @opts = opts.map {|k, v| [k.to_sym, v]}.to_h
-        end
-
         def convert(text, ctx = nil)
-          Conversion.new(text, ctx, @opts).call
+          Conversion.new(text, ctx).call
         end
       end
 
@@ -37,10 +28,9 @@ module RedmineReformat
         PANDOC_RECOVERABLE_EXIT_CODES = []
 
         # receives textile, returns markdown
-        def initialize(textile, ctx, opts = {})
+        def initialize(textile, ctx)
           @textile = textile.dup
           @ctx = ctx
-          @opts = opts
           @reference = ctx.ref
           @placeholders = []
         end
@@ -66,7 +56,7 @@ module RedmineReformat
             # https://www.redmine.org/issues/23341
             wiki_links_atomic: false,
             table_pipe_escaping: !is_redcarpet,
-          }.merge(@opts.slice(:list_separator_html_comment))
+          }
 
           clean_white_space textile
           initialize_reformatter textile, format_opts, @reference
@@ -80,11 +70,6 @@ module RedmineReformat
           merge_pre_code_offtags textile
 
           no_textile textile
-          # eat image attributes, which cannot be expressed in markdown anyway and
-          # would make pandoc produce raw HTML <img> tags with unreplaced
-          # placeholders in them; must run before HTML escaping, which would
-          # otherwise eat '!<aligned.png!' images
-          normalize_images textile
           escape_html_tags textile
           block_textile_quotes textile
 
@@ -101,6 +86,9 @@ module RedmineReformat
           # block should be processed here before inlines, but delaying some of them,
           # as their syntax collides with some tricky inline sequences
           hard_break textile
+          # eat image attributes, which cannot be expressed in markdown anyway and would
+          # make pandoc produce raw HTML <img> tags with unreplaced placeholders in them
+          normalize_images textile
           inline_textile_link textile # avoid misinterpeation of invalid link-like sequences
           inline_textile_code textile # offtagize inline code
           block_textile_table textile
