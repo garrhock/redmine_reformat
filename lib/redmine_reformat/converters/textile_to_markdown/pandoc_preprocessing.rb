@@ -1093,7 +1093,9 @@ module RedmineReformat
             # other type stand on their own.
             text.gsub!(/\n\n<!--( end list)? -->\n(?=\n([^\n]*))/) do
               nxt = $2
-              prev = $~.pre_match[/[^\n]*\z/]
+              mbegin = $~.begin(0)
+              prev_nl = mbegin.zero? ? nil : text.rindex("\n", mbegin - 1)
+              prev = text[(prev_nl ? prev_nl + 1 : 0)...mbegin]
               prev_bullet = prev =~ /\A\s*[-+*]\s/
               prev_ordered = prev =~ /\A\s*\d+\.\s/
               nxt_bullet = nxt =~ /\A\s{0,3}[-+*]\s/
