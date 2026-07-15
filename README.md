@@ -270,8 +270,14 @@ specification is required in such cases, e.g.
 
 ### `TextileToMarkdown`
 
-Usage: `'TextileToMarkdown'`\
-Arguments: (none)
+Usage: `'TextileToMarkdown'` or `["TextileToMarkdown", {"list_separator_html_comment": true}]`\
+Arguments:
+- `options` - a hash with optional parameters:
+  - `list_separator_html_comment`: use `<!-- -->` instead of the default
+    `&#29;` to keep adjacent lists and lists followed by indented code blocks
+    apart when converting to the `markdown` (Redcarpet) formatting. Only use
+    it if your Redmine renders HTML comments invisibly - see
+    [#20497](http://www.redmine.org/issues/20497). Default `false`.
 
 `TextileToMarkdown` uses Pandoc for the actual conversion. Before pandoc is called,
 the input text is subject to extensive preprocessing, often derived from Redmine

@@ -27,3 +27,26 @@ Text after.
 | ------- | ---------- | ----------- |
 | 7.0     | 2021-01-01 |             |
 | 7.1     | 2021-06-01 | fixed stuff |
+
+# Star-dot header cells
+
+| Name | Description                  | Acceptable Values |
+| ---- | ---------------------------- | ----------------- |
+| desc | Provides a brief description | String            |
+
+# Markdown table in textile
+
+| Name       | Description  | Default       |
+| ---------- | ------------ | ------------- |
+| param.name | What it does | default value |
+
+# Table directly after text
+
+Query plan:
+
+|    |                  |      |
+| -- | ---------------- | ---- |
+| Id | Operation        | Name |
+| 0  | SELECT STATEMENT |      |
+
+next paragraph
